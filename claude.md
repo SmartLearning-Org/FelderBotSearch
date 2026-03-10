@@ -114,7 +114,7 @@ Andre events ignoreres. Linjer der ikke starter med `data: ` eller som er `[DONE
 
 - **Route:** `/` (Chat.razor er default-side).
 - **Render mode:** `InteractiveServer`.
-- Brugerbeskeder vises som plain text (HTML-encoded, newlines som `<br />`); assistent-svar rendres som **Markdown** via Markdig (`Markdown.ToHtml`).
+- Brugerbeskeder vises som plain text (HTML-encoded, newlines som `<br />`); assistent-svar rendres som **Markdown** via Markdig (`Markdown.ToHtml`) med `UsePipeTables()` så pipe-tabeller rendres korrekt (kræver `@using Markdig`).
 - Streaming-indikator: `▌` (`.chat-cursor`) mens `IsStreaming` er true.
 - Fejl vises i rød under boblen (`msg.Error`).
 - Scrolling: `scrollChatToBottom` kaldes via JS efter render når `_shouldScrollToBottom` er sat (`OnAfterRenderAsync`).
