@@ -1,0 +1,156 @@
+@page "/"
+@rendermode InteractiveServer
+<PageTitle>Chat</PageTitle>
+
+<div class="chat-container">
+    <div class="chat-header">
+        <h1>Chat</h1>
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="StartNewChat" disabled="@_isLoading">
+            Ny samtale
+        </button>
+    </div>
+
+    <div class="chat-messages" @ref="_messagesContainer">
+        @foreach (var msg in _messages)
+        {
+            <div class="chat-message @(msg.IsUser ? "chat-message-user" : "chat-message-assistant")">
+                <div class="chat-bubble @(msg.IsUser ? "" : "chat-bubble-markdown")">
+                    @if (msg.Error != null)
+                    {
+                        <div class="text-danger small">@msg.Error</div>
+                    }
+                    else
+                    {
+                        @((MarkupString)FormatContent(msg.Content, msg.IsUser))
+                        @if (msg.IsStreaming)
+                        {
+                            <span class="chat-cursor">▌</span>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="chat-input-area">
+        <EditForm Model="_inputModel" OnValidSubmit="SendMessage">
+            <div class="input-group">
+                <input type="text"
+                       class="form-control chat-input"
+                       placeholder="Skriv din besked..."
+                       @bind="_inputModel.Message"
+                       @bind:event="oninput"
+                       @bind:after="OnMessageChanged"
+                       maxlength="4000"
+                       disabled="@_isLoading" />
+                <button type="submit" class="btn btn-primary chat-send" disabled="@(!_canSend)">
+                    Send
+                </button>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private readonly List<ChatMessage> _messages = new();
+    private readonly ChatInputModel _inputModel = new();
+    private bool _isLoading;
+    private string? _previousResponseId;
+    private ElementReference _messagesContainer;
+    private bool _shouldScrollToBottom;
+
+    private bool _canSend => !_isLoading && !string.IsNullOrWhiteSpace(_inputModel.Message ?? "");
+
+    private void OnMessageChanged() => StateHasChanged();
+
+    [Inject]
+    private IOpenAIResponsesService OpenAIService { get; set; } = null!;
+
+    [Inject]
+    private IJSRuntime JS { get; set; } = null!;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_shouldScrollToBottom)
+        {
+            _shouldScrollToBottom = false;
+            try { await JS.InvokeVoidAsync("scrollChatToBottom", _messagesContainer); } catch { /* ignore */ }
+        }
+    }
+
+    private static readonly Markdig.MarkdownPipeline _markdownPipeline = new Markdig.MarkdownPipelineBuilder().Build();
+
+    private static string FormatContent(string content, bool isUser)
+    {
+        if (string.IsNullOrEmpty(content)) return "";
+        if (isUser)
+            return System.Net.WebUtility.HtmlEncode(content).Replace("\n", "<br />");
+        return Markdig.Markdown.ToHtml(content ?? "", _markdownPipeline);
+    }
+
+    private void StartNewChat()
+    {
+        _previousResponseId = null;
+        _messages.Clear();
+        _inputModel.Message = "";
+        StateHasChanged();
+    }
+
+    private async Task SendMessage()
+    {
+        var text = (_inputModel.Message ?? "").Trim();
+        if (string.IsNullOrEmpty(text) || _isLoading) return;
+
+        _messages.Add(new ChatMessage { IsUser = true, Content = text });
+        _inputModel.Message = "";
+        _isLoading = true;
+        var assistantMessage = new ChatMessage { IsUser = false, Content = "", IsStreaming = true };
+        _messages.Add(assistantMessage);
+        _shouldScrollToBottom = true;
+        StateHasChanged();
+
+        string? errorSeen = null;
+
+        try
+        {
+            await foreach (var chunk in OpenAIService.SendMessageStreamingAsync(text, _previousResponseId))
+            {
+                if (chunk.ErrorMessage != null)
+                {
+                    errorSeen = chunk.ErrorMessage;
+                    assistantMessage.Error = chunk.ErrorMessage;
+                    assistantMessage.IsStreaming = false;
+                    break;
+                }
+                if (chunk.Delta != null)
+                {
+                    assistantMessage.Content += chunk.Delta;
+                    assistantMessage.IsStreaming = true;
+                }
+                if (chunk.ResponseId != null)
+                {
+                    _previousResponseId = chunk.ResponseId;
+                    assistantMessage.IsStreaming = false;
+                }
+                _shouldScrollToBottom = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            assistantMessage.Error = "Der opstod en fejl: " + ex.Message;
+            assistantMessage.IsStreaming = false;
+        }
+
+        if (errorSeen != null && string.IsNullOrEmpty(assistantMessage.Content))
+            assistantMessage.Content = "";
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private class ChatInputModel
+    {
+        public string Message { get; set; } = "";
+    }
+}
