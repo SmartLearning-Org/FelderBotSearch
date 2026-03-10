@@ -6,6 +6,9 @@
 # dotenv files
 .env
 
+# Cursor IDE (skills, rules, etc.)
+.cursor/
+
 # User-specific files
 *.rsuser
 *.suo
