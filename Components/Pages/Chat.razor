@@ -1,10 +1,13 @@
 @page "/"
 @rendermode InteractiveServer
-<PageTitle>Chat</PageTitle>
+<PageTitle>FelderBot</PageTitle>
 
 <div class="chat-container">
     <div class="chat-header">
-        <h1>Chat</h1>
+        <div class="chat-header-title">
+            <h1>FelderBot</h1>
+            <p class="chat-subtitle">hjælper dig til en god dag i Christiansfeld</p>
+        </div>
         <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="StartNewChat" disabled="@_isLoading">
             Ny samtale
         </button>
@@ -69,8 +72,16 @@
     [Inject]
     private IJSRuntime JS { get; set; } = null!;
 
+    [Inject]
+    private IOptions<OpenAIOptions> OpenAIOptions { get; set; } = null!;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            var promptName = OpenAIOptions.Value?.InstructionsPath ?? "Prompts/system.md";
+            try { await JS.InvokeVoidAsync("console.log", "Systemprompt: " + promptName); } catch { /* ignore */ }
+        }
         if (_shouldScrollToBottom)
         {
             _shouldScrollToBottom = false;

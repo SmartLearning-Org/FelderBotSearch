@@ -19,10 +19,22 @@
     border-bottom: 1px solid #e9ecef;
 }
 
+.chat-header-title {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
 .chat-header h1 {
     font-size: 1.5rem;
     font-weight: 600;
     color: #212529;
+    margin: 0;
+}
+
+.chat-subtitle {
+    font-size: 0.9rem;
+    color: #6c757d;
     margin: 0;
 }
 
