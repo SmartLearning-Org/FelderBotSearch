@@ -1,3 +1,4 @@
+using Azure.Search.Documents;
 using System.Net.Http.Headers;
 using FelderBot.Components;
 using FelderBot.Options;
@@ -8,8 +9,19 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<OpenAIOptions>(
     builder.Configuration.GetSection(OpenAIOptions.SectionName));
+builder.Services.Configure<AzureSearchOptions>(
+    builder.Configuration.GetSection(AzureSearchOptions.SectionName));
 
 builder.Services.AddSingleton<IInstructionsLoader, InstructionsLoader>();
+builder.Services.AddSingleton<SearchClient>(sp =>
+{
+    var opt = sp.GetRequiredService<IOptions<AzureSearchOptions>>().Value;
+    if (string.IsNullOrWhiteSpace(opt.Endpoint) || string.IsNullOrWhiteSpace(opt.IndexName) || string.IsNullOrWhiteSpace(opt.ApiKey))
+        return new SearchClient(new Uri("https://localhost/"), "placeholder", new Azure.AzureKeyCredential("placeholder"));
+    var endpoint = new Uri(opt.Endpoint.TrimEnd('/'));
+    return new SearchClient(endpoint, opt.IndexName, new Azure.AzureKeyCredential(opt.ApiKey));
+});
+builder.Services.AddScoped<ISearchService, AzureSearchService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IOpenAIResponsesService, OpenAIResponsesService>();
 builder.Services.AddHttpClient<IOpenAIResponsesService, OpenAIResponsesService>((sp, client) =>

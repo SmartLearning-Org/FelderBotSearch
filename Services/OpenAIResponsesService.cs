@@ -9,21 +9,31 @@ namespace FelderBot.Services;
 public class OpenAIResponsesService : IOpenAIResponsesService
 {
     private const string PreviousResponseIdKey = "PreviousResponseId";
+    private const string RagContextHeader = "\n\n[Brug følgende kontekst til at besvare brugeren. Svar ud fra denne kontekst og nævn kilder hvis det giver mening.]\n\n";
     private readonly HttpClient _httpClient;
     private readonly IOptions<OpenAIOptions> _options;
+    private readonly IOptions<AzureSearchOptions> _searchOptions;
     private readonly IInstructionsLoader _instructionsLoader;
+    private readonly ISearchService _searchService;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ILogger<OpenAIResponsesService> _logger;
 
     public OpenAIResponsesService(
         HttpClient httpClient,
         IOptions<OpenAIOptions> options,
+        IOptions<AzureSearchOptions> searchOptions,
         IInstructionsLoader instructionsLoader,
-        IHttpContextAccessor httpContextAccessor)
+        ISearchService searchService,
+        IHttpContextAccessor httpContextAccessor,
+        ILogger<OpenAIResponsesService> logger)
     {
         _httpClient = httpClient;
         _options = options;
+        _searchOptions = searchOptions;
         _instructionsLoader = instructionsLoader;
+        _searchService = searchService;
         _httpContextAccessor = httpContextAccessor;
+        _logger = logger;
     }
 
     public async IAsyncEnumerable<StreamingChunk> SendMessageStreamingAsync(
@@ -38,6 +48,14 @@ public class OpenAIResponsesService : IOpenAIResponsesService
         }
 
         var instructions = await _instructionsLoader.GetInstructionsAsync(cancellationToken);
+        var searchResults = await GetRagContextAsync(userMessage, cancellationToken);
+        if (searchResults.Count > 0)
+        {
+            var contextBlock = string.Join("\n\n---\n\n", searchResults.Select(r =>
+                string.IsNullOrEmpty(r.Source) ? r.Content : $"[{r.Source}]\n{r.Content}"));
+            instructions += RagContextHeader + contextBlock;
+        }
+
         var opt = _options.Value;
 
         var body = new Dictionary<string, object?>
@@ -144,5 +162,20 @@ public class OpenAIResponsesService : IOpenAIResponsesService
     {
         var ctx = _httpContextAccessor.HttpContext;
         ctx?.Session?.SetString(PreviousResponseIdKey, id);
+    }
+
+    private async Task<IReadOnlyList<Models.SearchResult>> GetRagContextAsync(string userMessage, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var top = _searchOptions.Value.Top;
+            if (top <= 0) top = 5;
+            return await _searchService.SearchAsync(userMessage, top, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Azure AI Search fejlede; svar uden RAG-kontekst.");
+            return Array.Empty<Models.SearchResult>();
+        }
     }
 }
