@@ -56,6 +56,9 @@ public class OpenAIResponsesService : IOpenAIResponsesService
             instructions += RagContextHeader + contextBlock;
         }
 
+        var sources = searchResults.Select(r => r.Source).Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).Distinct().ToList();
+        yield return StreamingChunk.FromSources(sources);
+
         var opt = _options.Value;
 
         var body = new Dictionary<string, object?>

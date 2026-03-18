@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace FelderBot.Models;
 
 public sealed class ChatMessage
@@ -6,4 +8,5 @@ public sealed class ChatMessage
     public string Content { get; set; } = "";
     public bool IsStreaming { get; set; }
     public string? Error { get; set; }
+    public List<string>? Sources { get; set; }
 }

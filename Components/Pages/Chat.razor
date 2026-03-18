@@ -31,6 +31,18 @@
                         }
                     }
                 </div>
+                @if (!msg.IsUser && msg.Sources?.Count > 0)
+                {
+                    <div class="chat-sources">
+                        <span class="chat-sources-label">Kilder:</span>
+                        <ul>
+                            @foreach (var src in msg.Sources)
+                            {
+                                <li>@src</li>
+                            }
+                        </ul>
+                    </div>
+                }
             </div>
         }
     </div>
@@ -135,6 +147,8 @@
                     assistantMessage.IsStreaming = false;
                     break;
                 }
+                if (chunk.Sources != null)
+                    assistantMessage.Sources = chunk.Sources.ToList();
                 if (chunk.Delta != null)
                 {
                     assistantMessage.Content += chunk.Delta;
